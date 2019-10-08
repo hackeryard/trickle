@@ -142,7 +142,7 @@ main(int argc, char **argv)
 /*	setenv("TRICKLE_LATENCY", latency, 1); */
 
 	setenv("LD_PRELOAD", path, 1);
-
+	printf("%s\n", argv[0]);
 	execvp(argv[0], argv);
 	err(1, "exec()");
 
