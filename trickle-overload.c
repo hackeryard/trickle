@@ -214,6 +214,9 @@ trickle_init(void)
 		errx(1, "[trickle] Failed to open libc");
 #endif /* DLOPEN */
 
+	// runker debug
+	printf("DLOPENLIBC: %s\n", DLOPENLIBC)
+
 	/*
 	 * We get write first, so that we have a bigger chance of
 	 * exiting gracefully with safe_printv.
