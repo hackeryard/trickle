@@ -210,12 +210,13 @@ trickle_init(void)
 #ifdef NODLOPEN
 	dh = (void *) -1L;
 #else
- 	if ((dh = dlopen(DLOPENLIBC, RTLD_LAZY)) == NULL)
+ 	if ((dh = dlopen(DLOPENLIBC, RTLD_LAZY)) == NULL) {
 		errx(1, "[trickle] Failed to open libc");
+	 } else {
+		// runker debug
+		printf("DLOPENLIBC: %s\n", DLOPENLIBC);
+	 }
 #endif /* DLOPEN */
-
-	// runker debug
-	printf("DLOPENLIBC: %s\n", DLOPENLIBC)
 
 	/*
 	 * We get write first, so that we have a bigger chance of
