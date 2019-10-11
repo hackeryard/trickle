@@ -223,6 +223,9 @@ trickle_init(void)
 	 * exiting gracefully with safe_printv.
 	 */
 
+	// runker debug dh
+	printf("dl handler: %p\n", dh);
+
 	GETADDR(write);
 
 	GETADDR(socket);
