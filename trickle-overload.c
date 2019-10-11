@@ -63,6 +63,7 @@
 
 #define SD_INSELECT 0x01
 
+// 使用queue.h的结构体 TAILQ_ENTRY 构建链表结构socketdesc
 struct sockdesc {
 	int                    sock;
 	int                    flags;
@@ -71,7 +72,7 @@ struct sockdesc {
 		int     flags;
 		size_t  lastlen;
 		size_t  selectlen;
-	}                      data[2];
+	}                      data[2]; // which index指示是RECV还是SEND 是一个用于限速的buffer
 
 	TAILQ_ENTRY(sockdesc)  next;
 };
@@ -84,7 +85,7 @@ struct delay {
 	short               pollevents;
 	int                 pollidx;
 
-	TAILQ_ENTRY(delay)  next;	
+	TAILQ_ENTRY(delay)  next;
 };
 
 TAILQ_HEAD(delayhead, delay);
@@ -189,6 +190,8 @@ void                   safe_printv(int, const char *, ...);
 		trickle_init();			\
 } while (0)
 
+// wrap the glibc api 参考：
+// http://samanbarghi.com/blog/2014/09/05/how-to-wrap-a-system-call-libc-function-in-linux/
 #define GETADDR(x) do {							\
 	if ((libc_##x = dlsym(dh, UNDERSCORE #x)) == NULL)		\
 		errx(0, "[trickle] Failed to get " #x "() address");	\
@@ -332,6 +335,7 @@ socket(int domain, int type, int protocol)
 	type &= ~SOCK_CLOEXEC;
 #endif
 
+	// 只对tcp socket提供限流
 	if (sock != -1 && domain == AF_INET && type == SOCK_STREAM) {
 		if ((sd = calloc(1, sizeof(*sd))) == NULL)
 			return (-1);
@@ -444,7 +448,7 @@ select_shift(struct delayhead *dhead, struct timeval *difftv,
 
 	if (d != NULL)
 		timersub(&d->delaytv, difftv, *delaytv);
-	else 
+	else
 		*delaytv = NULL;
 
 	/* XXX this should be impossible ... */
@@ -478,7 +482,7 @@ select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
 	if (__timeout != NULL) {
 		_timeout = *__timeout;
 		timeout = &_timeout;
-	} 
+	}
 
 	trickle_lock();
 	INIT;
@@ -489,7 +493,7 @@ select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds,
 	 */
 	for (which = 0; which < 2; which++)
 		TAILQ_FOREACH(sd, &sdhead, next)
-			if ((fds = fdsets[which]) != NULL && 
+			if ((fds = fdsets[which]) != NULL &&
 			    FD_ISSET(sd->sock, fds) &&
 			    select_delay(&dhead, sd, which)) {
 				FD_CLR(sd->sock, fds);
@@ -601,14 +605,14 @@ poll(struct pollfd *fds, int nfds, int __timeout)
 			continue;
 
 		/* For each event */
-		if (pfd->events & POLL_RDMASK && 
+		if (pfd->events & POLL_RDMASK &&
 		    (d = select_delay(&dhead, sd, TRICKLE_RECV)) != NULL) {
 			d->pollevents = pfd->events & POLL_RDMASK;
 			d->pollidx = i;
 			pfd->events &= ~POLL_RDMASK;
 		}
 
-		if (pfd->events & POLL_WRMASK && 
+		if (pfd->events & POLL_WRMASK &&
 		    (d = select_delay(&dhead, sd, TRICKLE_SEND)) != NULL) {
 			d->pollevents = pfd->events & POLL_WRMASK;
 			d->pollidx = i;
@@ -685,6 +689,7 @@ read(int fd, void *buf, size_t nbytes)
 	trickle_lock();
 	INIT;
 
+	//
 	if (!(eagain = delay(fd, &xnbytes, TRICKLE_RECV) == TRICKLE_WOULDBLOCK)) {
 		trickle_unlock();
 		ret = (*libc_read)(fd, buf, xnbytes);
@@ -745,7 +750,7 @@ readv(int fd, const struct iovec *iov, int iovcnt)
 	return (ret);
 }
 
-#ifndef __FreeBSD__ 
+#ifndef __FreeBSD__
 ssize_t
 recv(int sock, void *buf, size_t len, int flags)
 {
@@ -764,7 +769,7 @@ recv(int sock, void *buf, size_t len, int flags)
 		safe_printv(0, "[DEBUG] recv(%d, *, %d, %d) = %d",
 		    sock, len, flags, ret);
 	} else {
-		safe_printv(0, "[DEBUG] delaying recv(%d, *, %d, %d)", sock, len, flags);		
+		safe_printv(0, "[DEBUG] delaying recv(%d, *, %d, %d)", sock, len, flags);
 #endif /* DEBUG */
 	}
 
@@ -806,7 +811,7 @@ recvfrom(int sock, void *buf, size_t len, int flags, struct sockaddr *from,
 		    sock, len, flags, ret);
 	} else {
 		safe_printv(0, "[DEBUG] delaying recvfrom(%d, *, %d, %d)", sock,
-		    len, flags);		
+		    len, flags);
 #endif /* DEBUG */
 	}
 
@@ -1132,6 +1137,7 @@ delay(int sock, ssize_t *len, short which)
 		return (0);
 	}
 
+	// tv为需要delay的时间 通过getdelay获取
 	if ((tv = getdelay(sd, len, which)) != NULL) {
 		TIMEVAL_TO_TIMESPEC(tv, &ts);
 
@@ -1141,6 +1147,7 @@ delay(int sock, ssize_t *len, short which)
 		if (ISSET(sd->flags, TRICKLE_NONBLOCK))
 			return (TRICKLE_WOULDBLOCK);
 
+		// 如果被中断 则把余下的时间赋值给ts 继续sleep 直到完成ts时间
 		while (nanosleep(&ts, &rm) == -1 && errno == EINTR)
 			ts = rm;
 	}

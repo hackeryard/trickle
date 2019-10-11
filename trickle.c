@@ -84,6 +84,7 @@ main(int argc, char **argv)
 			lsmooth = optarg;
 			break;
 		case 's':
+			// 本次仅测试单机模式
 			standalone = 1;
 			break;
 		case 'L':
@@ -127,7 +128,7 @@ main(int argc, char **argv)
 		    (errno == EACCES || errno == ENOENT))
 			warn("Could not reach trickled, working independently");
 	} else
-		strlcpy(sockname, "", sizeof(sockname));
+		strlcpy(sockname, "", sizeof(sockname)); // standalone
 
 	snprintf(verbosestr, sizeof(verbosestr), "%d", verbose);
 
@@ -141,7 +142,7 @@ main(int argc, char **argv)
 	setenv("TRICKLE_LSMOOTH", lsmooth, 1);
 /*	setenv("TRICKLE_LATENCY", latency, 1); */
 
-	setenv("LD_PRELOAD", path, 1);
+	setenv("LD_PRELOAD", path, 1); // preload the share lib
 	printf("%s\n", argv[0]);
 	execvp(argv[0], argv);
 	err(1, "exec()");
